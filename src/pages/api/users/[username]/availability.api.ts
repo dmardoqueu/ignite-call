@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/prisma";
-import dayjs from "dayjs";
-import { NextApiRequest, NextApiResponse } from "next";
+import dayjs from 'dayjs'
+import { NextApiRequest, NextApiResponse } from 'next'
+import { prisma } from '../../../../lib/prisma'
 
-export default async function handle(
+export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse,
 ) {
@@ -14,17 +14,17 @@ export default async function handle(
     const { date } = req.query
 
     if (!date) {
-        return res.status(400).json({ message: 'Date not provided.'})
+        return res.status(400).json({ message: 'Date no provided.' })
     }
 
     const user = await prisma.user.findUnique({
         where: {
-            username
-        }
+            username,
+        },
     })
 
     if (!user) {
-        return res.status(400).json({ message: 'User does not exist.'})
+        return res.status(400).json({ message: 'User does not exist.' })
     }
 
     const referenceDate = dayjs(String(date))
@@ -34,18 +34,18 @@ export default async function handle(
         return res.json({ possibleTimes: [], availableTimes: [] })
     }
 
-    const userAvaibility = await prisma.userTimeInterval.findFirst({
+    const userAvailability = await prisma.userTimeInterval.findFirst({
         where: {
             user_id: user.id,
-            week_day: referenceDate.get('day')
-        }
+            week_day: referenceDate.get('day'),
+        },
     })
 
-    if (!userAvaibility) {
+    if (!userAvailability) {
         return res.json({ possibleTimes: [], availableTimes: [] })
     }
 
-    const { time_start_in_minutes, time_end_in_minutes} = userAvaibility
+    const { time_start_in_minutes, time_end_in_minutes } = userAvailability
 
     const startHour = time_start_in_minutes / 60
     const endHour = time_end_in_minutes / 60
@@ -53,26 +53,30 @@ export default async function handle(
     const possibleTimes = Array.from({ length: endHour - startHour }).map(
         (_, i) => {
             return startHour + i
-        }
+        },
     )
 
     const blockedTimes = await prisma.scheduling.findMany({
         select: {
-            date: true
+            date: true,
         },
         where: {
             user_id: user.id,
             date: {
                 gte: referenceDate.set('hour', startHour).toDate(),
-                lte: referenceDate.set('hour', endHour).toDate()
-            }
-        }
+                lte: referenceDate.set('hour', endHour).toDate(),
+            },
+        },
     })
 
     const availableTimes = possibleTimes.filter((time) => {
-        return !blockedTimes.some(
-            (blockedTime) => blockedTime.date.getHours() === time
+        const isTimeBlocked = blockedTimes.some(
+            (blockedTime) => blockedTime.date.getHours() === time,
         )
+
+        const isTimeInPast = referenceDate.set('hour', time).isBefore(new Date())
+
+        return !isTimeBlocked && !isTimeInPast
     })
 
     return res.json({ possibleTimes, availableTimes })
